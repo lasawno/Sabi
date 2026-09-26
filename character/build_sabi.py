@@ -6,6 +6,7 @@ This is an initial procedural sculpt, not an approved production character.
 """
 import bpy
 import math
+import random
 import json
 import sys
 from pathlib import Path
@@ -25,9 +26,9 @@ def material(name, rgb, roughness=.65):
     p.inputs['Roughness'].default_value = roughness
     return m
 
-fur = material('Chocolate brown coat', (.105,.039,.018))
-muzzle = material('Warm muzzle', (.22,.095,.041))
-inner = material('Ear velvet', (.28,.11,.065))
+fur = material('Chocolate brown coat', (.038,.012,.005))
+muzzle = material('Warm muzzle', (.083,.028,.010))
+inner = material('Ear velvet', (.12,.046,.018))
 eye = material('Glossy dark eyes', (.009,.005,.003), .12)
 nose = material('Soft black nose', (.023,.012,.009), .28)
 cloth = material('Charcoal scarf', (.025,.029,.03))
@@ -64,6 +65,7 @@ def ribbon(name, points, radius, mat, bone):
     for p,co in zip(s.bezier_points,points):
         p.co=co;p.handle_left_type='AUTO';p.handle_right_type='AUTO'
     o=bpy.data.objects.new(name,c);bpy.context.collection.objects.link(o);c.materials.append(mat)
+    bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active=o;o.select_set(True)
     bpy.ops.object.convert(target='MESH');o.select_set(False)
     parts.append((o,bone));return o
@@ -71,11 +73,11 @@ def ribbon(name, points, radius, mat, bone):
 # Z up, face toward -Y. Reference proportions remain editable.
 ellipsoid('Torso',(0,.04,1.03),(.32,.23,.49),fur,'spine')
 ellipsoid('Chest bib',(0,-.163,1.16),(.23,.085,.29),muzzle,'spine')
-ellipsoid('Head',(0,-.02,1.81),(.43,.30,.37),fur,'head')
-ellipsoid('Cheek.L',(-.25,-.22,1.72),(.20,.14,.16),fur,'head')
-ellipsoid('Cheek.R',(.25,-.22,1.72),(.20,.14,.16),fur,'head')
-ellipsoid('Muzzle',(0,-.30,1.66),(.21,.19,.13),muzzle,'head')
-ellipsoid('Nose',(0,-.473,1.70),(.083,.052,.055),nose,'head')
+ellipsoid('Head',(0,-.02,1.81),(.36,.285,.34),fur,'head')
+ellipsoid('Cheek.L',(-.20,-.19,1.72),(.16,.12,.13),fur,'head')
+ellipsoid('Cheek.R',(.20,-.19,1.72),(.16,.12,.13),fur,'head')
+ellipsoid('Muzzle',(0,-.30,1.66),(.16,.18,.105),muzzle,'head')
+ellipsoid('Nose',(0,-.473,1.70),(.064,.046,.042),nose,'head')
 ribbon('Mouth',[(-.10,-.453,1.625),(0,-.474,1.61),(.10,-.453,1.625)],.007,nose,'head')
 
 for sign,side in [(-1,'L'),(1,'R')]:
@@ -85,7 +87,7 @@ for sign,side in [(-1,'L'),(1,'R')]:
     o=ellipsoid('Inner ear.'+side,(x,-.083,2.15),(.135,.035,.255),inner,'ear.'+side)
     o.rotation_euler[1]=sign*.30
     ellipsoid('Eye.'+side,(sign*.17,-.285,1.82),(.095,.062,.112),eye,'head')
-    capsule('Thigh.'+side,(sign*.18,.035,.79),(sign*.21,.035,.38),.145,fur,'leg.'+side)
+    capsule('Thigh.'+side,(sign*.18,.035,.79),(sign*.21,.035,.22),.145,fur,'leg.'+side)
     ellipsoid('Foot.'+side,(sign*.21,-.085,.17),(.15,.23,.12),fur,'leg.'+side)
     for toe in range(3):
         ellipsoid('Toe.%s.%s'%(side,toe),(sign*.21+(toe-1)*.065,-.255,.145),(.032,.072,.035),muzzle,'leg.'+side)
@@ -105,9 +107,76 @@ for x,h in [(-.065,.04),(0,.07),(.065,.04)]:
     capsule('Crown point',(x,-.267,1.39),(x,-.267,1.39+h),.016,gold,'spine')
 ribbon('Crown base',[(-.08,-.267,1.39),(0,-.273,1.38),(.08,-.267,1.39)],.015,gold,'spine')
 
-tail_points=[(0,.17,.77),(0,.46,.70),(0,.78,.78),(0,1.04,.99),(0,1.14,1.20)]
+tail_points=[(0,.17,.77),(-.12,.48,.55),(-.42,.75,.40),(-.78,.88,.43),(-1.05,.90,.60)]
 for i,(a,b) in enumerate(zip(tail_points,tail_points[1:])):
-    capsule('Tail volume.%d'%i,a,b,[.17,.23,.24,.18][i],fur,'tail.%d'%i)
+    capsule('Tail volume.%d'%i,a,b,[.20,.25,.26,.22][i],fur,'tail.%d'%i)
+
+
+# Merge overlapping coat volumes before rigging; the surface must read as an animal.
+def fuse_group(names, label, assigned_bone):
+    selected=[o for o,b in parts if o.name in names]
+    if not selected:return
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in selected:o.select_set(True)
+    bpy.context.view_layer.objects.active=selected[0]
+    for o in selected:
+        parts.remove(next(item for item in parts if item[0]==o))
+    bpy.ops.object.join()
+    o=bpy.context.object;o.name=label
+    rem=o.modifiers.new('Continuous sculpt surface','REMESH')
+    rem.mode='VOXEL';rem.voxel_size=.012
+    bpy.ops.object.modifier_apply(modifier=rem.name)
+    sm=o.modifiers.new('Soften sculpt joins','SMOOTH');sm.factor=.75;sm.iterations=4
+    bpy.ops.object.modifier_apply(modifier=sm.name)
+    for p in o.data.polygons:p.use_smooth=True
+    parts.append((o,assigned_bone))
+fuse_group(['Head','Cheek.L','Cheek.R','Muzzle'],'Sabi facial sculpt','head')
+for side in ['L','R']:
+    fuse_group(['Thigh.'+side,'Foot.'+side],'Connected leg.'+side,'leg.'+side)
+    fuse_group(['Forearm.'+side,'Paw.'+side],'Forearm and paw.'+side,'forearm.'+side)
+
+# Actual tapered fur geometry follows the same bones as its emitter.
+# Deterministic seed makes successive reviews comparable.
+random.seed(21)
+coat_mats=[material('Fur strand '+str(i),c,.82) for i,c in enumerate([
+    (.025,.008,.003),(.055,.017,.006),(.095,.033,.011),(.16,.070,.027)])]
+def groom(o,bone_name,length,density):
+    o.data.calc_loop_triangles()
+    triangles=list(o.data.loop_triangles)
+    weights=[t.area for t in triangles]
+    count=max(80,int(sum(weights)*density))
+    verts=[];faces=[];mi=[]
+    for t in random.choices(triangles,weights=weights,k=count):
+        a,b,c=[o.data.vertices[j] for j in t.vertices]
+        u,v=random.random(),random.random()
+        if u+v>1:u,v=1-u,1-v
+        p=a.co+(b.co-a.co)*u+(c.co-a.co)*v
+        normal=(a.normal*(1-u-v)+b.normal*u+c.normal*v).normalized()
+        world=o.matrix_world@p
+        # Protect the eyes, nose and central muzzle so the expression stays legible.
+        if o.name=='Sabi facial sculpt' and world.y<-.235 and world.z>1.61 and world.z<1.96:
+            if abs(world.x)<.29:continue
+        tangent=normal.cross(Vector((0,1,.13))).normalized()
+        if tangent.length<.1:tangent=Vector((1,0,0))
+        bend=Vector((0,.12,-.35))
+        h=length*random.uniform(.65,1.3)
+        tip=p+normal*h+bend*h
+        mid=p+normal*h*.57+bend*h*.2
+        width=.0015 if length<.08 else .002
+        j=len(verts)
+        verts.extend([p-tangent*width,p+tangent*width,mid+tangent*width*.48,mid-tangent*width*.48,tip])
+        faces.extend([(j,j+1,j+2,j+3),(j+3,j+2,j+4)])
+        shade=random.choices(range(4),weights=[3,5,3,1])[0];mi.extend([shade,shade])
+    mesh=bpy.data.meshes.new(o.name+' groom');mesh.from_pydata(verts,[],faces);mesh.update()
+    f=bpy.data.objects.new(o.name+' fur',mesh);bpy.context.collection.objects.link(f);f.matrix_world=o.matrix_world.copy()
+    for m in coat_mats:mesh.materials.append(m)
+    for poly,idx in zip(mesh.polygons,mi):poly.material_index=idx;poly.use_smooth=True
+    parts.append((f,bone_name))
+for o,b in list(parts):
+    if any(m==fur for m in o.data.materials):
+        length=.105 if o.name.startswith('Tail') else (.04 if 'facial' in o.name else .055)
+        groom(o,b,length,18000 if 'facial' in o.name else 11000)
+
 
 # Named skeleton and weighted meshes; this blockout uses rigid per-part weights.
 # Continuous topology and blended joint weights are a later sculpt/rig gate.
@@ -176,13 +245,13 @@ for key in lids:
 # Neutral review stage keeps attention on the sculpt and motion.
 floor=material('Review ground',(.025,.032,.04))
 ellipsoid('Display plinth',(0,.2,-.025),(1.45,1.45,.09),floor)
-bpy.ops.object.camera_add(location=(3.5,-6,2.5));cam=bpy.context.object
+bpy.ops.object.camera_add(location=(2.4,-7,2.7));cam=bpy.context.object
 cam.rotation_euler=(Vector((0,.1,1.25))-cam.location).to_track_quat('-Z','Y').to_euler()
-cam.data.type='ORTHO';cam.data.ortho_scale=5.6;scene.camera=cam
+cam.data.type='ORTHO';cam.data.ortho_scale=4.9;scene.camera=cam
 for loc,power,size in [((-3,-4,5),650,4),((3,-2,3),400,3),((0,3,4),850,2)]:
     bpy.ops.object.light_add(type='AREA',location=loc);o=bpy.context.object;o.data.energy=power;o.data.shape='DISK';o.data.size=size
     o.rotation_euler=(Vector((0,0,1.3))-o.location).to_track_quat('-Z','Y').to_euler()
-scene.world.color=(.07,.07,.07)
+scene.world.color=(.025,.025,.025)
 scene.render.engine='CYCLES';scene.cycles.samples=32;scene.cycles.use_denoising=True
 scene.render.resolution_x=1280;scene.render.resolution_y=720;scene.render.resolution_percentage=100
 scene.render.image_settings.file_format='PNG';scene.render.filepath=str(OUT/'frames'/'sabi_')
@@ -191,7 +260,7 @@ assert len(rig.data.bones)==15
 assert len(lids)==4
 assert all(o.vertex_groups.get(b) for o,b in parts)
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'Sabi-Character-Blockout.blend'))
-(OUT/'build-report.json').write_text(json.dumps({'bones':len(rig.data.bones),'weighted_parts':len(parts),'blink_controls':len(lids),'frames':360,'visual_review':'pending','stage':'procedural full-body blockout; final sculpt, groom and blended joint weights pending'},indent=2))
+(OUT/'build-report.json').write_text(json.dumps({'bones':len(rig.data.bones),'weighted_parts':len(parts),'blink_controls':len(lids),'frames':360,'visual_review':'pending','stage':'reference revision with continuous facial sculpt and geometric fur; joint blending and backpack contact still pending'},indent=2))
 if '--render' in sys.argv:
     (OUT/'frames').mkdir(exist_ok=True)
     bpy.ops.render.render(animation=True)
