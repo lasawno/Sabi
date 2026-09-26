@@ -1,4 +1,5 @@
 """Create an unapproved Sabi reconstruction candidate from the selected reference."""
+import inspect
 import hashlib
 import json
 import os
@@ -20,8 +21,9 @@ def main():
         (out / "status.json").write_text(json.dumps(status, indent=2))
     save()
     try:
+        auth_key = "token" if "token" in inspect.signature(Client).parameters else "hf_token"
         client = Client("https://microsoft-trellis-2.hf.space",
-                        hf_token=os.environ.get("HF_TOKEN"),
+                        **{auth_key: os.environ.get("HF_TOKEN")},
                         httpx_kwargs={"timeout": 60}, verbose=False)
         client.predict(api_name="/start_session")
         status["stage"] = "preprocessing"
