@@ -1,23 +1,20 @@
 # Sabi
 
-Character development for Clever Levels / Dash.
+Character development for Clever Levels.
 
-## Current milestone
+## Current status
 
-The `character/` folder contains an editable 3D eye-and-eyelid generator, a Blender review-scene script, a Mac launcher and the development checklist. The generator recreates the GLB locally, so no binary model download is required.
+The procedural character was rejected because it did not match the approved brown woodland Sabi reference. Its full-body generator and automatic render workflow have been removed from the active branch. Earlier commits remain available as history, not approved assets.
 
-This is an early eye-mechanics study, not the completed Sabi character. Full-body modeling, fur, rigging, natural idle motion and the requested video remain pending. Numerical checks have passed; visual verification in Blender has not yet been completed.
+The approved direction is the supplied front, three-quarter, side and back reference: realistic brown fur, large animal ears, small glossy eyes, natural muzzle, bushy tail, charcoal scarf with gold crown and black backpack with gold hardware.
 
-## Open on a Mac
+Replacement work is testing image-to-3D reconstruction. No replacement mesh, rig or finished idle animation has passed visual review yet. Existing setup scripts and eye studies are historical experiments and must not be treated as the final character.
 
-Install Blender for Apple Silicon into Applications. From the repository folder, run:
+## Acceptance order
 
-```bash
-bash character/setup-mac.command
-```
-
-The launcher generates the GLB, builds a review scene and opens it in Blender. The launcher and review script have passed syntax checks, but have not yet been successfully run in Blender.
-
-## Next deliverable
-
-A viewable standing animation of Sabi breathing, blinking, looking left and right, adjusting his backpack strap and returning smoothly to idle. See [the development checklist](character/DEVELOPMENT.md). Gameplay integration follows character review.
+1. Match the static model to the reference in four views.
+2. Build natural joint deformation and facial controls.
+3. Verify breathing and blinking with planted feet.
+4. Verify left/right attention, ear and tail follow-through.
+5. Verify paw contact and backpack adjustment.
+6. Export and inspect a standing-motion MP4, then integrate into the additional game.
